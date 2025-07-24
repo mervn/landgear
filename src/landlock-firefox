@@ -1,0 +1,138 @@
+#!/bin/sh -aeu
+# Limit Firefox using landlock-LSM backed sandbox.
+
+# These environment variables *must* be defined:
+#
+# DBUS_SESSION_BUS_ADDRESS
+# HOME
+# WAYLAND_DISPLAY
+# XDG_RUNTIME_DIR
+
+# These environment variables *may* be defined:
+#
+# PIPEWIRE_CORE
+# PIPEWIRE_RUNTIME_DIR
+# PULSE_COOKIE
+# PULSE_SERVER
+# XDG_CACHE_HOME
+# XDG_CONFIG_HOME
+# XDG_DATA_HOME
+# XDG_DOWNLOAD_DIR
+# XDG_PUBLICSHARE_DIR
+
+# These guidelines *should* be followed:
+#
+# The proc-filesystem (i.e. /proc) is mounted with `hidepid=ptraceable` option.
+# The user does not have direct gpu (i.e. /dev/dri/card0) access.
+# The user reads the entire script.
+
+# Set XDG_* early as it is often referenced. XDG_RUNTIME_DIR must already exist!
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+XDG_DOWNLOAD_DIR="${XDG_DOWNLOAD_DIR:-$HOME/Downloads}"
+XDG_PUBLICSHARE_DIR="${XDG_PUBLICSHARE_DIR:-$HOME/Public}"
+
+# A seperate temporary directory significantly decreases runtime attack-surface.
+rundir="${XDG_RUNTIME_DIR}/landlock/firefox-${$}"
+mkdir -p "$rundir"
+
+# A dbus proxy significantly decreases runtime attack-surface.
+# TODO: restrict access to the notification interface.
+dbus_proxy="${rundir}/bus"
+xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
+--filter							\
+--broadcast=org.freedesktop.portal.*=@/org/freedesktop/portal/*	\
+--call=org.freedesktop.portal.*=*				\
+--own=org.mozilla.firefox.*					\
+--own=org.mpris.MediaPlayer2.firefox.*				\
+--talk=org.freedesktop.Notifications				\
+--talk=org.a11y.Bus						\
+--talk=ca.desrt.dconf						\
+&
+
+# TODO: find a better way to ensure proxy is up.
+sleep 1
+DBUS_SESSION_BUS_ADDRESS="unix:path=${dbus_proxy}"
+
+# Pipewire provides desktop-portal and screencast.
+PIPEWIRE_CORE="${PIPEWIRE_CORE:-pipewire-0}"
+PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
+
+# Pulseaudio provides sound-server.
+PULSE_COOKIE="${PULSE_COOKIE:-$XDG_CONFIG_HOME/pulse/cookie}"
+
+# Support every server-type.
+# TODO: add support for ipv6 with custom port.
+case "${PULSE_SERVER:=unix:$XDG_RUNTIME_DIR/pulse/native}" in
+unix:*)
+	# This port will never be assigned.
+	pulse_port=0
+
+	pulse_proxy="${PULSE_SERVER#*:}"
+
+	;;
+
+tcp:*)
+	if [ "${PULSE_SERVER%:*}" = tcp ]
+	then
+
+	# No port. Use the default.
+	pulse_port=4317
+
+	else
+
+	pulse_port="${PULSE_SERVER##*:}"
+
+	fi
+
+	# This directory will always be readable.
+	pulse_proxy="$rundir"
+
+	;;
+
+*)
+	# BAD FORMAT!
+	unset PULSE_SERVER
+
+	# This port will never be assigned.
+	pulse_port=0
+
+	# This directory will always be readable.
+	pulse_proxy="$rundir"
+
+	;;
+esac
+
+# Firefox creates a wayland-proxy using $WAYLAND_DISPLAY. To avoid having to
+# read-write the entire $XDG_RUNTIME_DIR, use a read-only"able" absolute-path.
+WAYLAND_DISPLAY="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+
+# Read-only PATHs
+LL_FS_RO="/bin/bash:/bin/pwd:/bin/uname:/etc/fonts:/etc/gai.conf:/etc/gtk-3.0:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/etc/mime.types:/etc/nsswitch.conf:/etc/os-release:/etc/resolv.conf:/etc/speech-dispatcher:/etc/ssl/certs/ca-certificates.crt:/lib:/lib64:/sys/bus:/sys/class:/sys/devices:/usr/bin/basename:/usr/bin/dirname:/usr/bin/expr:/usr/bin/firefox:/usr/bin/killall:/usr/bin/speech-dispatcher:/usr/bin/tr:/usr/bin/which:/usr/include:/usr/lib:/usr/lib64:/usr/libexec/speech-dispatcher-modules:/usr/share:/var/cache/fontconfig:${PULSE_COOKIE}:${XDG_CONFIG_HOME}/fontconfig:${XDG_DATA_HOME}/fonts:${XDG_CONFIG_HOME}/user-dirs.dirs:${XDG_PUBLICSHARE_DIR}"
+
+# Read-write PATHs
+# TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
+LL_FS_RW="/dev:/proc:${HOME}/.mozilla:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CACHE_HOME}/mozilla:${XDG_DOWNLOAD_DIR}:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
+
+# Bindable ports (for server programs)
+LL_TCP_BIND=""
+
+# Connectable ports (for client programs)
+LL_TCP_CONNECT="80:443:631:${pulse_port}"
+
+# These environment variables are intentionally set after LL_* .
+TMPDIR="$rundir"
+XDG_RUNTIME_DIR="$rundir"
+
+# Always cleanup dbus-proxy on exit.
+trap "kill ${!} ; rm -r $rundir" EXIT
+
+# Prevent leakage to limit side-channel attacks.
+unset dbus_proxy
+unset pulse_port
+unset pulse_proxy
+unset rundir
+
+# Avoid exec(1) for trap(1) to work.
+sandboxer firefox "$@"

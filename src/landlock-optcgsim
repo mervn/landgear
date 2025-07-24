@@ -1,0 +1,134 @@
+#!/bin/sh -aeu
+# Limit OPTCGSim using landlock-LSM backed sandbox.
+
+# These environment variables *must* be defined:
+#
+# DBUS_SESSION_BUS_ADDRESS
+# HOME
+# WAYLAND_DISPLAY
+# XDG_RUNTIME_DIR
+
+# These environment variables *may* be defined:
+#
+# APP_HOME
+# PIPEWIRE_CORE
+# PIPEWIRE_RUNTIME_DIR
+# PULSE_COOKIE
+# PULSE_SERVER
+# XDG_CACHE_HOME
+# XDG_CONFIG_HOME
+
+# These guidelines *should* be followed:
+#
+# The proc-filesystem (i.e. /proc) is mounted with `hidepid=ptraceable` option.
+# The user does not have direct gpu (i.e. /dev/dri/card0) access.
+# The user reads the entire script.
+
+# This program is mostly self-contained.
+APP_HOME="${APP_HOME:-$HOME/.local/lib64/OPTCGSim}"
+
+# Set XDG_* early as it is often referenced. XDG_RUNTIME_DIR must already exist!
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+# A seperate temporary directory significantly decreases runtime attack-surface.
+rundir="${XDG_RUNTIME_DIR}/landlock/optcgsim-${$}"
+mkdir -p "$rundir"
+
+# A dbus proxy significantly decreases runtime attack-surface.
+dbus_proxy="${rundir}/bus"
+xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
+--filter							\
+--broadcast=org.freedesktop.portal.*=@/org/freedesktop/portal/*	\
+--call=org.freedesktop.portal.*=*				\
+--talk=ca.desrt.dconf						\
+--talk=org.a11y.Bus						\
+--talk=org.gtk.Settings						\
+--talk=org.kde.StatusNotifierWatcher				\
+&
+
+# TODO: find a better way to ensure proxy is up.
+sleep 1
+DBUS_SESSION_BUS_ADDRESS="unix:path=${dbus_proxy}"
+
+# Pipewire provides desktop-portal and screencast.
+PIPEWIRE_CORE="${PIPEWIRE_CORE:-pipewire-0}"
+PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
+
+# Pulseaudio provides sound-server.
+PULSE_COOKIE="${PULSE_COOKIE:-$XDG_CONFIG_HOME/pulse/cookie}"
+
+# Support every server-type.
+# TODO: add support for ipv6 with custom port.
+case "${PULSE_SERVER:=unix:$XDG_RUNTIME_DIR/pulse/native}" in
+unix:*)
+	# This port will never be assigned.
+	pulse_port=0
+
+	pulse_proxy="${PULSE_SERVER#*:}"
+
+	;;
+
+tcp:*)
+	if [ "${PULSE_SERVER%:*}" = tcp ]
+	then
+
+	# No port. Use the default.
+	pulse_port=4317
+
+	else
+
+	pulse_port="${PULSE_SERVER##*:}"
+
+	fi
+
+	# This directory will always be readable.
+	pulse_proxy="$rundir"
+
+	;;
+
+*)
+	# BAD FORMAT!
+	unset PULSE_SERVER
+
+	# This port will never be assigned.
+	pulse_port=0
+
+	# This directory will always be readable.
+	pulse_proxy="$rundir"
+
+	;;
+esac
+
+# Discord uses $WAYLAND_DISPLAY. To avoid having to read-write the entire
+# $XDG_RUNTIME_DIR, use a read-only"able" absolute-path.
+WAYLAND_DISPLAY="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+
+# Read-only PATHs
+LL_FS_RO="/etc/fonts:/etc/gtk-3.0:/etc/ld.so.cache:/etc/mime.types:/etc/resolv.conf:/etc/ssl/certs/ca-certificates.crt:/lib:/lib64:/sys/bus:/sys/class:/sys/devices:/usr/lib:/usr/lib64:/usr/share:/var/cache/fontconfig:${APP_HOME}:${PULSE_COOKIE}"
+
+# Read-write PATHs
+# TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
+LL_FS_RW="/dev:/proc:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CONFIG_HOME}/unity3d/Batsu/OPTCGSim:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
+
+# Bindable ports (for server programs)
+LL_TCP_BIND=""
+
+# Connectable ports (for client programs)
+LL_TCP_CONNECT="443:${pulse_port}"
+
+# These environment variables are intentionally set after LL_* .
+TMPDIR="$rundir"
+XDG_RUNTIME_DIR="$rundir"
+
+# Always cleanup dbus-proxy on exit.
+trap "kill ${!} ; rm -r $rundir" EXIT
+
+# Prevent leakage to limit side-channel attacks.
+unset dbus_proxy
+unset pulse_port
+unset pulse_proxy
+unset rundir
+
+# Avoid exec(1) for trap(1) to work.
+sandboxer ${APP_HOME}/OPTCGSim.x86_64 "$@"

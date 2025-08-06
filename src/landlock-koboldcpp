@@ -1,0 +1,142 @@
+#!/bin/sh -aeu
+# Limit koboldcpp using landlock-LSM backed sandbox.
+
+# These environment variables *must* be defined:
+#
+# DBUS_SESSION_BUS_ADDRESS
+# HOME
+# WAYLAND_DISPLAY
+# XDG_RUNTIME_DIR
+
+# These environment variables *may* be defined:
+#
+# __GL_SHADER_DISK_CACHE_PATH
+# CUDA_CACHE_PATH
+# CUDA_MPS_PIPE_DIRECTORY
+# LLAMA_CACHE
+# PULSE_COOKIE
+# PULSE_SERVER
+# TMPDIR
+# XDG_CACHE_HOME
+# XDG_CONFIG_HOME
+# XDG_DATA_HOME
+
+# Set XDG_* early as it is often referenced. XDG_RUNTIME_DIR must already exist!
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+
+# TMPDIR will act as the runtime directory, instead of XDG_RUNTIME_DIR. This is
+# due to koboldcpp often exceeding the quota of XDG_RUNTIME_DIR. At least 1G is
+# needed for decompression.
+TMPDIR="${TMPDIR:-/tmp}"
+
+# A seperate temporary directory significantly decreases runtime attack-surface.
+rundir="${TMPDIR}/koboldcpp-${$}"
+mkdir -m 700 -p "$rundir"
+
+# A dbus proxy significantly decreases runtime attack-surface.
+dbus_proxy="${rundir}/bus"
+xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
+--filter							\
+--broadcast=org.freedesktop.portal.*=@/org/freedesktop/portal/*	\
+--call=org.freedesktop.portal.*=*				\
+--talk=ca.desrt.dconf						\
+--talk=org.a11y.Bus						\
+--talk=org.gtk.Settings						\
+&
+
+# TODO: check for proxy readiness directly ( see --fd in xdg-dbus-proxy(1) ).
+sleep 1
+DBUS_SESSION_BUS_ADDRESS="unix:path=${dbus_proxy}"
+
+# NVIDIA OpenGL support.
+__GL_SHADER_DISK_CACHE_PATH="${__GL_SHADER_DISK_CACHE_PATH:-$XDG_CACHE_HOME/nvidia/GLCache}"
+
+# NVIDIA CUDA support.
+CUDA_CACHE_PATH="${CUDA_CACHE_PATH:-$HOME/.nv/ComputeCache}"
+CUDA_MPS_PIPE_DIRECTORY="${CUDA_MPS_PIPE_DIRECTORY:-/tmp/nvidia-mps}"
+
+# LLaMA environment support.
+LLAMA_CACHE="${LLAMA_CACHE:-$XDG_CACHE_HOME/koboldcpp}"
+
+# Pulseaudio authentication support.
+PULSE_COOKIE="${PULSE_COOKIE:-$XDG_CONFIG_HOME/pulse/cookie}"
+
+# Pulseaudio sound-server support.
+# TODO: support ipv6 with custom port.
+case "${PULSE_SERVER:=unix:$XDG_RUNTIME_DIR/pulse/native}" in
+unix:*)
+	# This port will never be assigned.
+	pulse_port=0
+
+	pulse_proxy="${PULSE_SERVER#*:}"
+
+	;;
+
+tcp:*)
+	if [ "${PULSE_SERVER%:*}" = tcp ]
+	then
+
+	# No port. Use the default.
+	pulse_port=4317
+
+	else
+
+	pulse_port="${PULSE_SERVER##*:}"
+
+	fi
+
+	# This directory will always be readable.
+	pulse_proxy="$rundir"
+
+	;;
+
+*)
+	# BAD FORMAT!
+	unset PULSE_SERVER
+
+	# This port will never be assigned.
+	pulse_port=0
+
+	# This directory will always be readable.
+	pulse_proxy="$rundir"
+
+	;;
+esac
+
+# GUI processes need access to the display socket.
+WAYLAND_DISPLAY="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+
+# Read-only PATHs
+LL_FS_RO="/bin/bash:/bin/grep:/bin/hostname:/bin/mkdir:/bin/mktemp:/bin/rm:/bin/sed:/bin/sh:/bin/uname:/etc/OpenCL:/etc/drirc:/etc/fonts:/etc/gai.conf:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/etc/ld.so.preload:/etc/mime.types:/etc/nsswitch.conf:/etc/nvidia:/etc/os-release:/etc/resolv.conf:/etc/ssl/certs/ca-certificates.crt:/etc/vulkan:/etc/xdg/vulkan:/lib:/lib64:/opt/cuda:/sys:/usr/bin/awk:/usr/bin/clinfo:/usr/bin/cut:/usr/bin/env:/usr/bin/head:/usr/bin/nvidia-smi:/usr/bin/pyvenv:/usr/bin/tr:/usr/bin/vulkaninfo:/usr/bin/x86_64-pc-linux-gnu-vulkaninfo:/usr/bin/xdg-mime:/usr/bin/xdg-open:/usr/lib:/usr/lib64:/usr/local/share:/usr/share:/var/cache/fontconfig:/var/lib/flatpak/exports/share/vulkan:${HOME}/.local/bin/koboldcpp:${PULSE_COOKIE}:${XDG_CONFIG_HOME}/fontconfig:${XDG_DATA_HOME}/flatpak/exports/share/vulkan:${XDG_CONFIG_HOME}/mimeapps.list:${XDG_DATA_HOME}/fonts:${XDG_DATA_HOME}/models:${XDG_DATA_HOME}/vulkan"
+
+# Read-write PATHs
+# TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
+LL_FS_RW="/dev:/proc:${CUDA_CACHE_PATH}:${CUDA_MPS_PIPE_DIRECTORY}:${LLAMA_CACHE}:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CONFIG_HOME}/koboldcpp:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
+
+# Bindable ports (for server programs)
+LL_TCP_BIND="5001"
+
+# Connectable ports (for client programs)
+LL_TCP_CONNECT="80:443:5001:${pulse_port}"
+
+# These environment variables are intentionally set after LL_* .
+#
+# This program decompresses into HOME, potentially introducing unwanted files.
+# To avoid this, use the runtime-directory as HOME instead.
+HOME="$rundir"
+TMPDIR="$rundir"
+XDG_RUNTIME_DIR="$rundir"
+
+# Cleanup dbus-proxy on exit.
+trap "kill ${!} ; rm -r $rundir" EXIT INT
+
+# Cleanup setup environment.
+unset dbus_proxy
+unset pulse_port
+unset pulse_proxy
+unset rundir
+
+# Avoid exec(1) for trap(1) to work.
+sandboxer koboldcpp "$@"

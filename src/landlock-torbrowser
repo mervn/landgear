@@ -129,7 +129,7 @@ HOME="${APPIMAGE_DIR}/Browser"
 XDG_DOWNLOAD_DIR="${XDG_DOWNLOAD_DIR}/torbrowser"
 
 # Always cleanup dbus-proxy on exit.
-trap "kill ${!} ; rm -r $rundir" EXIT
+trap "kill ${!} ; rm -r $rundir" EXIT INT
 
 # Prevent leakage to limit side-channel attacks.
 unset APPIMAGE_DIR

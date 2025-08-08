@@ -128,7 +128,7 @@ TMPDIR="$rundir"
 XDG_RUNTIME_DIR="$rundir"
 
 # Always cleanup dbus-proxy on exit.
-trap "kill ${!} ; rm -r $rundir" EXIT
+trap "kill ${!} ; rm -r $rundir" EXIT INT
 
 # Prevent leakage to limit side-channel attacks.
 unset dbus_proxy

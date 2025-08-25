@@ -1,5 +1,5 @@
 #!/bin/sh -aeu
-# Limit Tor-Browser AppImage using landlock-LSM backed sandbox.
+# Limit Tor-Browser using landlock-LSM backed sandbox.
 
 # These environment variables *must* be defined:
 #
@@ -99,7 +99,7 @@ esac
 WAYLAND_DISPLAY="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
 
 # Read-only paths
-LL_FS_RO="/bin/cp:/bin/bash:/bin/getconf:/bin/grep:/bin/id:/bin/pwd:/bin/rm:/bin/sed:/bin/sh:/bin/uname:/etc/fonts:/etc/gai.conf:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/etc/mime.types:/etc/nsswitch.conf:/etc/os-release:/etc/resolv.conf:/etc/ssl/certs/ca-certificates.crt:/lib:/lib64:/sys/bus:/sys/class:/sys/devices:/usr/bin/basename:/usr/bin/dirname:/usr/bin/env:/usr/bin/expr:/usr/bin/file:/usr/bin/killall:/usr/bin/tr:/usr/bin/which:/usr/lib:/usr/lib64:/usr/share/X11/xkb:${PULSE_COOKIE}"
+LL_FS_RO="/bin/cp:/bin/bash:/bin/getconf:/bin/grep:/bin/id:/bin/pwd:/bin/rm:/bin/sed:/bin/sh:/bin/uname:/etc/fonts:/etc/gai.conf:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/etc/mime.types:/etc/nsswitch.conf:/etc/os-release:/etc/resolv.conf:/etc/ssl/certs/ca-certificates.crt:/lib:/lib64:/sys/bus:/sys/class:/sys/devices:/usr/bin/basename:/usr/bin/dirname:/usr/bin/env:/usr/bin/expr:/usr/bin/file:/usr/bin/killall:/usr/bin/tail:/usr/bin/tr:/usr/bin/which:/usr/lib:/usr/lib64:/usr/share/X11/xkb:${PULSE_COOKIE}"
 
 # Read-write paths
 # TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825

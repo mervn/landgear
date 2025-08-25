@@ -11,8 +11,6 @@
 # These environment variables *may* be defined:
 #
 # APP_HOME
-# PIPEWIRE_CORE
-# PIPEWIRE_RUNTIME_DIR
 # PULSE_COOKIE
 # PULSE_SERVER
 # XDG_CACHE_HOME
@@ -44,10 +42,6 @@ xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
 # TODO: check for proxy readiness directly (see --fd in xdg-dbus-proxy(1)).
 sleep 1
 DBUS_SESSION_BUS_ADDRESS="unix:path=${dbus_proxy}"
-
-# Pipewire (for screencast).
-PIPEWIRE_CORE="${PIPEWIRE_CORE:-pipewire-0}"
-PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
 
 # Pulseaudio (for audio).
 PULSE_COOKIE="${PULSE_COOKIE:-$XDG_CONFIG_HOME/pulse/cookie}"
@@ -101,7 +95,7 @@ LL_FS_RO="/etc/fonts:/etc/gtk-3.0:/etc/ld.so.cache:/etc/mime.types:/etc/resolv.c
 
 # Read-write paths
 # TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
-LL_FS_RW="/dev:/proc:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CONFIG_HOME}/unity3d/Batsu/OPTCGSim:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
+LL_FS_RW="/dev:/proc:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CONFIG_HOME}/unity3d/Batsu/OPTCGSim:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
 
 # Bindable ports (for server programs)
 LL_TCP_BIND=""

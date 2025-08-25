@@ -124,5 +124,9 @@ unset pulse_port
 unset pulse_proxy
 unset rundir
 
+# This program has subprocesses that rely on relative directories (./ ../) .
+# The expected "root" of these relative directories is $APP_HOME.
+cd "$APP_HOME"
+
 # Avoid exec(1) for trap(1) to work.
 sandboxer ${APP_HOME}/start-tor-browser.desktop "$@"

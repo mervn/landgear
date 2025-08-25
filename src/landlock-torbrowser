@@ -13,9 +13,9 @@
 
 # These environment variables *may* be defined:
 #
-# TODO: add support for TOR_* environment variables.
 # PIPEWIRE_CORE
 # PIPEWIRE_RUNTIME_DIR
+# TODO: Add Tor environment variables.
 # PULSE_COOKIE
 # PULSE_SERVER
 # XDG_CACHE_HOME
@@ -40,7 +40,6 @@ rundir="${XDG_RUNTIME_DIR}/landlock/torbrowser-${$}"
 mkdir -p "$rundir"
 
 # A dbus proxy significantly decreases runtime attack-surface.
-# TODO: restrict access to the notification interface.
 dbus_proxy="${rundir}/bus"
 xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
 --filter							\
@@ -50,19 +49,18 @@ xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
 --own=org.mpris.MediaPlayer2.firefox.*				\
 &
 
-# TODO: find a better way to ensure proxy is up.
-sleep 1 
+# TODO: check for proxy readiness directly (see --fd in xdg-dbus-proxy(1)).
+sleep 1
 DBUS_SESSION_BUS_ADDRESS="unix:path=${dbus_proxy}"
 
-# Pipewire provides desktop-portal and screencast.
+# Pipewire (for screencast).
 PIPEWIRE_CORE="${PIPEWIRE_CORE:-pipewire-0}"
 PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
 
-# Pulseaudio provides sound-server.
+# Pulseaudio (for audio).
 PULSE_COOKIE="${PULSE_COOKIE:-$XDG_CONFIG_HOME/pulse/cookie}"
 
-# Support every server-type.
-# TODO: add support for ipv6 with custom port.
+# TODO: support ipv6 with custom port.
 case "${PULSE_SERVER:=unix:$XDG_RUNTIME_DIR/pulse/native}" in
 unix:*)
 	# This port will never be assigned.
@@ -103,14 +101,13 @@ tcp:*)
 	;;
 esac
 
-# Firefox creates a wayland-proxy using $WAYLAND_DISPLAY. To avoid having to
-# read-write the entire $XDG_RUNTIME_DIR, use a read-only"able" absolute-path.
+# Wayland (for display).
 WAYLAND_DISPLAY="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
 
-# Read-only PATHs
+# Read-only paths
 LL_FS_RO="/bin/cp:/bin/bash:/bin/getconf:/bin/grep:/bin/id:/bin/pwd:/bin/rm:/bin/sed:/bin/sh:/bin/uname:/etc/fonts:/etc/gai.conf:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/etc/mime.types:/etc/nsswitch.conf:/etc/os-release:/etc/resolv.conf:/etc/ssl/certs/ca-certificates.crt:/lib:/lib64:/sys/bus:/sys/class:/sys/devices:/usr/bin/basename:/usr/bin/dirname:/usr/bin/env:/usr/bin/expr:/usr/bin/file:/usr/bin/killall:/usr/bin/tr:/usr/bin/which:/usr/lib:/usr/lib64:/usr/share/X11/xkb:${PULSE_COOKIE}"
 
-# Read-write PATHs
+# Read-write paths
 # TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
 LL_FS_RW="/dev:/proc:/run/tor/control:/run/tor/socks:${APPIMAGE_DIR}:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_DOWNLOAD_DIR}/tor-browser:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
 
@@ -128,10 +125,10 @@ XDG_RUNTIME_DIR="$rundir"
 HOME="${APPIMAGE_DIR}/Browser"
 XDG_DOWNLOAD_DIR="${XDG_DOWNLOAD_DIR}/torbrowser"
 
-# Always cleanup dbus-proxy on exit.
+# Cleanup dbus-proxy on exit.
 trap "kill ${!} ; rm -r $rundir" EXIT INT
 
-# Prevent leakage to limit side-channel attacks.
+# Cleanup setup environment.
 unset APPIMAGE_DIR
 unset dbus_proxy
 unset pulse_port

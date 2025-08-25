@@ -20,12 +20,6 @@
 # XDG_DOWNLOAD_DIR
 # XDG_PUBLICSHARE_DIR
 
-# These guidelines *should* be followed:
-#
-# The proc-filesystem (i.e. /proc) is mounted with `hidepid=ptraceable` option.
-# The user does not have direct gpu (i.e. /dev/dri/card0) access.
-# The user reads the entire script.
-
 # Set XDG_* early as it is often referenced. XDG_RUNTIME_DIR must already exist!
 XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -38,7 +32,7 @@ rundir="${XDG_RUNTIME_DIR}/landlock/thunderbird-${$}"
 mkdir -p "$rundir"
 
 # A dbus proxy significantly decreases runtime attack-surface.
-# TODO: restrict access to the notification interface.
+# TODO: harden org.freedesktop.Notifications interface.
 dbus_proxy="${rundir}/bus"
 xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
 --filter							\
@@ -51,19 +45,18 @@ xdg-dbus-proxy "$DBUS_SESSION_BUS_ADDRESS" "$dbus_proxy"	\
 --talk=ca.desrt.dconf						\
 &
 
-# TODO: find a better way to ensure proxy is up.
+# TODO: check for proxy readiness directly (see --fd in xdg-dbus-proxy(1)).
 sleep 1
 DBUS_SESSION_BUS_ADDRESS="unix:path=${dbus_proxy}"
 
-# Pipewire provides desktop-portal and screencast.
+# Pipewire (for screencast).
 PIPEWIRE_CORE="${PIPEWIRE_CORE:-pipewire-0}"
 PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$XDG_RUNTIME_DIR}"
 
-# Pulseaudio provides sound-server.
+# Pulseaudio (for audio).
 PULSE_COOKIE="${PULSE_COOKIE:-$XDG_CONFIG_HOME/pulse/cookie}"
 
-# Support every server-type.
-# TODO: add support for ipv6 with custom port.
+# TODO: support ipv6 with custom port.
 case "${PULSE_SERVER:=unix:$XDG_RUNTIME_DIR/pulse/native}" in
 unix:*)
 	# This port will never be assigned.
@@ -104,16 +97,13 @@ tcp:*)
 	;;
 esac
 
-# Firefox creates a wayland-proxy using $WAYLAND_DISPLAY. To avoid having to
-# read-write the entire $XDG_RUNTIME_DIR, use a read-only"able" absolute-path.
+# Wayland (for display).
 WAYLAND_DISPLAY="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
 
-# Read-only PATHs
-# TODO: doc: resolv.conf symlink targets must also be readable.
-# TODO: doc: /run/../resolv.conf may not be available after suspend.
+# Read-only paths
 LL_FS_RO="/bin/bash:/bin/pwd:/bin/uname:/etc/fonts:/etc/gai.conf:/etc/gtk-3.0:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/etc/mime.types:/etc/nsswitch.conf:/etc/os-release:/etc/resolv.conf:/etc/speech-dispatcher:/etc/ssl/certs/ca-certificates.crt:/lib:/lib64:/run/systemd/resolve/resolv.conf:/run/systemd/resolve/stub-resolv.conf:/sys/bus:/sys/class:/sys/devices:/usr/bin/basename:/usr/bin/dirname:/usr/bin/expr:/usr/bin/killall:/usr/bin/speech-dispatcher:/usr/bin/thunderbird:/usr/bin/tr:/usr/bin/which:/usr/include:/usr/lib:/usr/lib64:/usr/libexec/speech-dispatcher-modules:/usr/share:/var/cache/fontconfig:${PULSE_COOKIE}:${XDG_CONFIG_HOME}/fontconfig:${XDG_DATA_HOME}/fonts:${XDG_CONFIG_HOME}/user-dirs.dirs:${XDG_PUBLICSHARE_DIR}"
 
-# Read-write PATHs
+# Read-write paths
 # TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
 LL_FS_RW="/dev:/proc:${HOME}/.thunderbird:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CACHE_HOME}/thunderbird:${XDG_DOWNLOAD_DIR}:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
 
@@ -127,10 +117,10 @@ LL_TCP_CONNECT="80:443:587:993:6697:${pulse_port}"
 TMPDIR="$rundir"
 XDG_RUNTIME_DIR="$rundir"
 
-# Always cleanup dbus-proxy on exit.
+# Cleanup dbus-proxy on exit.
 trap "kill ${!} ; rm -r $rundir" EXIT INT
 
-# Prevent leakage to limit side-channel attacks.
+# Cleanup setup environment.
 unset dbus_proxy
 unset pulse_port
 unset pulse_proxy

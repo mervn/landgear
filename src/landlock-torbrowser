@@ -106,10 +106,10 @@ LL_FS_RO="/bin/cp:/bin/bash:/bin/getconf:/bin/grep:/bin/id:/bin/pwd:/bin/rm:/bin
 LL_FS_RW="/dev:/proc:/run/tor/control:/run/tor/socks:${APP_HOME}:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
 
 # Bindable ports (for server programs)
-LL_TCP_BIND=""
+LL_TCP_BIND="9150:9151"
 
 # Connectable ports (for client programs)
-LL_TCP_CONNECT="80:443:${pulse_port}"
+LL_TCP_CONNECT="80:443:9050:9051:9150:9151:${pulse_port}"
 
 # These environment variables are intentionally set after LL_* .
 TMPDIR="$rundir"

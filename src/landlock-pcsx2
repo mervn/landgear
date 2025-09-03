@@ -93,7 +93,7 @@ LL_FS_RO="/etc/fonts:/etc/gai.conf:/etc/host.conf:/etc/hosts:/etc/ld.so.cache:/e
 
 # Read-write paths
 # TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
-LL_FS_RW="/dev:/proc:${XDG_CACHE_HOME}/PCSX2:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CONFIG_HOME}/PCSX2:${XDG_STATE_HOME}/PCSX2:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
+LL_FS_RW="/dev:/proc:${WAYLAND_DISPLAY}:${XDG_CACHE_HOME}/PCSX2:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CONFIG_HOME}/PCSX2:${XDG_STATE_HOME}/PCSX2:${dbus_proxy}:${pulse_proxy}:${rundir}"
 
 # Bindable ports (for server programs)
 LL_TCP_BIND=""

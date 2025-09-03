@@ -105,7 +105,7 @@ LL_FS_RO="/bin/bash:/bin/pwd:/bin/uname:/etc/fonts:/etc/gai.conf:/etc/gtk-3.0:/e
 
 # Read-write paths
 # TODO: https://github.com/flatpak/xdg-desktop-portal/issues/27#issuecomment-233057825
-LL_FS_RW="/dev:/proc:${HOME}/.mozilla:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CACHE_HOME}/mozilla:${XDG_DOWNLOAD_DIR}:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${WAYLAND_DISPLAY}:${dbus_proxy}:${pulse_proxy}:${rundir}"
+LL_FS_RW="/dev:/proc:${HOME}/.mozilla:${WAYLAND_DISPLAY}:${XDG_CACHE_HOME}/fontconfig:${XDG_CACHE_HOME}/mesa_shader_cache:${XDG_CACHE_HOME}/mesa_shader_cache_db:${XDG_CACHE_HOME}/mozilla:${XDG_DOWNLOAD_DIR}:${PIPEWIRE_RUNTIME_DIR}/${PIPEWIRE_CORE}:${dbus_proxy}:${pulse_proxy}:${rundir}"
 
 # Bindable ports (for server programs)
 LL_TCP_BIND=""
